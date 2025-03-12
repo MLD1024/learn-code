@@ -46,4 +46,4 @@ target/
 classes/
 out/
 logs/
-
+store/**
