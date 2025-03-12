@@ -3,8 +3,11 @@ package com.example.mq.codec;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageCodec;
+
 import java.util.List;
-import java.util.zip.*;
+import java.util.zip.DataFormatException;
+import java.util.zip.Deflater;
+import java.util.zip.Inflater;
 
 public class CompressionHandler extends MessageToMessageCodec<ByteBuf, ByteBuf> {
     private static final int COMPRESSION_THRESHOLD = 512;
@@ -13,19 +16,20 @@ public class CompressionHandler extends MessageToMessageCodec<ByteBuf, ByteBuf> 
     @Override
     protected void encode(ChannelHandlerContext ctx, ByteBuf msg, List<Object> out) {
         boolean shouldCompress = msg.readableBytes() >= COMPRESSION_THRESHOLD;
-        
-        try (Deflater deflater = new Deflater(COMPRESSION_LEVEL)) {
+
+        try {
+            Deflater deflater = new Deflater(COMPRESSION_LEVEL);
             byte[] input = new byte[msg.readableBytes()];
             msg.readBytes(input);
-            
+
             if (shouldCompress) {
                 deflater.setInput(input);
                 deflater.finish();
-                
+
                 ByteBuf compressed = ctx.alloc().buffer();
                 compressed.writeByte(1); // 压缩标志
                 compressed.writeInt(input.length); // 原始数据长度
-                
+
                 byte[] buffer = new byte[1024];
                 while (!deflater.finished()) {
                     int count = deflater.deflate(buffer);
@@ -48,23 +52,22 @@ public class CompressionHandler extends MessageToMessageCodec<ByteBuf, ByteBuf> 
     protected void decode(ChannelHandlerContext ctx, ByteBuf msg, List<Object> out) {
         try {
             int compressFlag = msg.readByte();
-            
+
             if (compressFlag == 1) {
                 int originalSize = msg.readInt();
-                
-                try (Inflater inflater = new Inflater()) {
-                    byte[] compressedData = new byte[msg.readableBytes()];
-                    msg.readBytes(compressedData);
-                    inflater.setInput(compressedData);
+                Inflater inflater = new Inflater();
+                byte[] compressedData = new byte[msg.readableBytes()];
+                msg.readBytes(compressedData);
+                inflater.setInput(compressedData);
 
-                    ByteBuf output = ctx.alloc().buffer(originalSize);
-                    byte[] buffer = new byte[1024];
-                    while (!inflater.finished()) {
-                        int count = inflater.inflate(buffer);
-                        output.writeBytes(buffer, 0, count);
-                    }
-                    out.add(output);
+                ByteBuf output = ctx.alloc().buffer(originalSize);
+                byte[] buffer = new byte[1024];
+                while (!inflater.finished()) {
+                    int count = inflater.inflate(buffer);
+                    output.writeBytes(buffer, 0, count);
                 }
+                out.add(output);
+
             } else {
                 ByteBuf output = ctx.alloc().buffer(msg.readableBytes());
                 output.writeBytes(msg);

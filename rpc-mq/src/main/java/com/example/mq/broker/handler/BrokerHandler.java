@@ -19,7 +19,6 @@ public class BrokerHandler extends SimpleChannelInboundHandler<RpcRequest> {
         if (request.getMethodName().equals("sendMessage")) {
             byte[] messageBody = (byte[]) request.getParameters()[0];
             long offset = commitLog.appendMessage(messageBody);
-            
             RpcResponse response = new RpcResponse();
             response.setRequestId(request.getRequestId());
             response.setResult(offset);

@@ -12,10 +12,8 @@ import java.io.Serializable;
 @ToString
 public class RpcRequest implements Serializable {
     private String requestId;
-    private String serviceName;
-    private String methodName;
     private String topic;
-    private Class<?>[] parameterTypes;
+    private String methodName;
     private Object[] parameters;
 
 }

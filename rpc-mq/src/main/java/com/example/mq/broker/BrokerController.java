@@ -1,14 +1,16 @@
 package com.example.mq.broker;
 
 import com.example.mq.broker.handler.BrokerHandler;
-import com.example.mq.client.handler.CompressionHandler;
 import com.example.mq.client.handler.HeartbeatHandler;
+import com.example.mq.codec.CompressionHandler;
 import com.example.mq.codec.MqProtocolDecoder;
 import com.example.mq.codec.MqProtocolEncoder;
+import com.example.mq.config.BrokerConfig;
 import com.example.mq.namesrv.NameServer;
 import com.example.mq.store.CommitLog;
 import com.example.mq.store.ConsumeQueue;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -78,19 +80,20 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 public class BrokerController {
-    private final BrokerConfig brokerConfig;
-    private final NameServer nameServer;
-    private CommitLog commitLog;
+    public final NameServer nameServer;
+    public CommitLog commitLog;
 
-    public BrokerController(BrokerConfig config) {
-        this.brokerConfig = config;
+    public BrokerController() {
         this.nameServer = new NameServer();
     }
 
     public void initialize() {
         try {
-            this.commitLog = new CommitLog(brokerConfig.getStorePath());
+            this.commitLog = new CommitLog(BrokerConfig.storePath);
             new ConsumeQueue("default_topic", 0);
+            nameServer.registerBroker("default_topic",
+                    BrokerConfig.brokerName,
+                    BrokerConfig.brokerIp + ":" + BrokerConfig.listenPort);
         } catch (Exception e) {
             // log.error("Failed to initialize CommitLog", e);
             e.printStackTrace();
@@ -103,7 +106,7 @@ public class BrokerController {
         NioEventLoopGroup workerGroup = new NioEventLoopGroup();
 
         try {
-            new ServerBootstrap()
+            ServerBootstrap serverBootstrap = new ServerBootstrap()
                     .group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
@@ -118,21 +121,22 @@ public class BrokerController {
                                     .addLast(new RpcEncoder(RpcResponse.class))
                                     .addLast(new BrokerHandler(commitLog));
                         }
-                    }).bind(brokerConfig.getListenPort()).sync();
-
-            // 启动心跳定时任务
-            new Thread(() -> {
-                while (true) {
-                    try {
-                        nameServer.registerBroker("default_topic",
-                                brokerConfig.getBrokerName(),
-                                brokerConfig.getBrokerIp() + ":" + brokerConfig.getListenPort());
-                        Thread.sleep(30000);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }).start();
+                    });
+            ChannelFuture channel = serverBootstrap.bind(BrokerConfig.listenPort).sync();
+            channel.channel().closeFuture().sync();
+            // // 启动心跳定时任务
+            // new Thread(() -> {
+            //     while (true) {
+            //         try {
+            //             nameServer.registerBroker("default_topic",
+            //                     brokerConfig.getBrokerName(),
+            //                     brokerConfig.getBrokerIp() + ":" + brokerConfig.getListenPort());
+            //             Thread.sleep(30000);
+            //         } catch (Exception e) {
+            //             e.printStackTrace();
+            //         }
+            //     }
+            // }).start();
 
         } finally {
             bossGroup.shutdownGracefully();
@@ -140,20 +144,9 @@ public class BrokerController {
         }
     }
 
-    @Getter
-    @Setter
-    public static class BrokerConfig {
-        private String brokerName = "broker-1";
-        private String brokerIp = "127.0.0.1";
-        private int listenPort = 8888;
-        private String storePath = "/tmp/commitlog";
-        private int maxMessageSize = 1024 * 1024 * 4;
-        private int flushInterval = 1000;
-        private boolean clusterEnable = false;
-    }
 
     public static void main(String[] args) throws Exception {
-        BrokerController brokerController = new BrokerController(new BrokerConfig());
+        BrokerController brokerController = new BrokerController();
         brokerController.initialize();
         brokerController.start();
     }

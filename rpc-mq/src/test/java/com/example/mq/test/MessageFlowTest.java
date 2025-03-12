@@ -9,8 +9,6 @@ import org.junit.Test;
 import java.util.Arrays;
 
 public class MessageFlowTest {
-    private RpcClient client;
-    private NameServer nameServer;
 //
 //     @Before
 //     public void setup() {
@@ -38,4 +36,4 @@ public class MessageFlowTest {
 //         RpcRequest request = new RpcRequest("sendMessage", new Object[]{"failoverMsg"});
 //         // 验证故障转移
 //     }
-// }
+}

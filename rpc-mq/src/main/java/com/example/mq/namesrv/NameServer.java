@@ -41,7 +41,7 @@ public class NameServer {
     public List<BrokerData> pickupBrokers(String topic) {
         List<BrokerData> aliveBrokers = topicRouteMap.getOrDefault(topic, Collections.emptyList())
                 .stream()
-                .filter(broker -> System.currentTimeMillis() - broker.lastUpdateTimestamp <= 30000)
+                .filter(broker -> System.currentTimeMillis() - broker.lastUpdateTimestamp <= 300000000)
                 .collect(Collectors.toList());
 
         if (!aliveBrokers.isEmpty()) {

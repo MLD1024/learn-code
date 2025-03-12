@@ -5,12 +5,12 @@ import com.example.mq.broker.RpcDecoder;
 import com.example.mq.broker.RpcEncoder;
 import com.example.mq.broker.RpcRequest;
 import com.example.mq.broker.RpcResponse;
-import com.example.mq.client.handler.CompressionHandler;
-import com.example.mq.client.handler.ConnectionRetryHandler;
 import com.example.mq.client.handler.HeartbeatHandler;
-import com.example.mq.codec.MqProtocolDecoder;
 import com.example.mq.client.handler.RpcClientHandler;
+import com.example.mq.codec.CompressionHandler;
+import com.example.mq.codec.MqProtocolDecoder;
 import com.example.mq.codec.MqProtocolEncoder;
+import com.example.mq.config.BrokerConfig;
 import com.example.mq.namesrv.NameServer;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
@@ -36,17 +36,15 @@ public class RpcClient {
     private final Map<String, Channel> connectionPool = new ConcurrentHashMap<>();
     private final ScheduledExecutorService heartbeatExecutor = Executors.newSingleThreadScheduledExecutor();
     private NameServer nameServer;
-    private BrokerController.BrokerConfig brokerConfig;
-    public RpcClient(int maxConnections, int heartbeatInterval, BrokerController.BrokerConfig brokerConfig, NameServer nameServer) {
-        this.maxConnections = maxConnections;
-        this.heartbeatInterval = heartbeatInterval;
-        this.brokerConfig = brokerConfig;
-        this.nameServer = nameServer;
-    }
+
+
+
     private Channel channel;
-    public RpcClient(int maxConnections, int heartbeatInterval) {
+
+    public RpcClient(int maxConnections, int heartbeatInterval, NameServer nameServer) {
         this.maxConnections = maxConnections;
         this.heartbeatInterval = heartbeatInterval;
+        this.nameServer = nameServer;
     }
 
     private Channel getChannel(String address) {
@@ -68,8 +66,8 @@ public class RpcClient {
                                 .addLast(new CompressionHandler())
                                 .addLast(new MqProtocolEncoder())  // 新增MQ专用编码器
                                 .addLast(new MqProtocolDecoder())  // 新增MQ专用解码器
-                                .addLast(new HeartbeatHandler())
-                                .addLast(new ConnectionRetryHandler(nameServer)); // 新增故障转移处理器
+                                .addLast(new HeartbeatHandler());
+                                // .addLast(new ConnectionRetryHandler(nameServer)); // 新增故障转移处理器
                     }
                 });
         return bootstrap.connect(host, port).syncUninterruptibly().channel();
@@ -86,17 +84,17 @@ public class RpcClient {
                         @Override
                         protected void initChannel(SocketChannel ch) {
                             ch.pipeline()
-                                .addLast(new RpcEncoder(RpcRequest.class))
-                                .addLast(new RpcDecoder(RpcResponse.class))
-                                .addLast(new MqProtocolEncoder())
-                                .addLast(new MqProtocolDecoder())
-                                .addLast(new RpcClientHandler());
+                                    .addLast(new RpcEncoder(RpcRequest.class))
+                                    .addLast(new RpcDecoder(RpcResponse.class))
+                                    .addLast(new MqProtocolEncoder())
+                                    .addLast(new MqProtocolDecoder())
+                                    .addLast(new RpcClientHandler());
                         }
                     });
 
             try {
-                String brokerIp = brokerConfig.getBrokerIp();
-                int listenPort = brokerConfig.getListenPort();
+                String brokerIp = BrokerConfig.brokerIp;
+                int listenPort = BrokerConfig.listenPort;
                 ChannelFuture future = bootstrap.connect(brokerIp, listenPort).sync();
                 channel = future.channel();
             } catch (InterruptedException e) {
@@ -123,7 +121,7 @@ public class RpcClient {
             try {
                 Channel currentChannel = getChannel(currentBroker);
                 ChannelFuture future = currentChannel.writeAndFlush(request).sync();
-                
+
                 if (!future.isSuccess()) {
                     throw new RuntimeException("请求发送失败，Broker: " + currentBroker);
                 }
